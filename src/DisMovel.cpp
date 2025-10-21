@@ -58,9 +58,11 @@ bool decodePacket(uint8_t* buffer, size_t bufferSize, uint32_t &seq, uint64_t &t
 
 
 void setup() {
+  Serial.begin(115200);
   lora.begin();
   lora.SpreadingFactor(12);
   t_1 = micros();
+  Serial.println("Enviando pacote 0");
   packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), seq, t_1);
   lora.sendData(packetBuffer, packetSize);
 }
@@ -76,7 +78,8 @@ void loop()
       if(rcvdSeq == 2)
       {
         t_2 = micros();
-        packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), ++rcvdSeq, nextTime);
+        Serial.println("Enviando pacote 3");
+        packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), ++rcvdSeq, t_2);
         lora.sendData(packetBuffer, packetSize);
       }
       if(rcvdSeq == 4)
