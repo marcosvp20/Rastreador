@@ -11,8 +11,6 @@ uint8_t packetBuffer[PAYLOAD_SIZE];
 uint8_t receivedBuffer[PAYLOAD_SIZE];
 int seq = 0;
 size_t packetSize = 0;
-uint64_t t_1 = 0;
-uint64_t t_2 = 0;
 
 struct Packet {
     uint32_t seq;
@@ -61,35 +59,59 @@ void setup() {
   Serial.begin(115200);
   lora.begin();
   lora.SpreadingFactor(12);
-  t_1 = micros();
 }
 void loop()
 {
+  // Use variáveis globais para TWR para maior clareza
+  static uint64_t T0_send = 0; // T0 no relógio do móvel
+  static uint64_t T1_recv = 0; // T1 no relógio do fixo
+  static uint64_t T2_send = 0; // T2 no relógio do móvel
+  static uint64_t T3_recv = 0; // T3 no relógio do fixo
+
   static uint32_t rcvdSeq = 0;
   static uint64_t rcvdTime = 0;
-  uint64_t nextTime = micros();
+  
   if((!rcvdSeq || seq == 0))
   {
+  seq = 0;
   Serial.println("Enviando pacote 0");
-  packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), seq, t_1);
+  T0_send = micros() + lora.getTimeOnAir(PAYLOAD_SIZE);
+  packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), seq, T0_send);
   lora.sendData(packetBuffer, packetSize);
-  seq++;
+  seq=1;
   }
   if(lora.receiveData(receivedBuffer, PAYLOAD_SIZE, 5000))
   {
-    uint64_t t_pre = micros();
+    uint64_t t_recv = micros(); // tempo de recepção do pacote
     if(decodePacket(receivedBuffer, sizeof(receivedBuffer), rcvdSeq, rcvdTime))
     {
       if(rcvdSeq == 1)
       {
+        T1_recv = t_recv + rcvdTime;
         Serial.println("Enviando pacote 3");
-        t_2 = micros() - t_pre + lora.getTimeOnAir(PAYLOAD_SIZE);
-        packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), ++rcvdSeq, t_2);
+        T2_send = micros() + lora.getTimeOnAir(PAYLOAD_SIZE); 
+        packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), ++rcvdSeq, T2_send);
         lora.sendData(packetBuffer, packetSize);
       }
       if(rcvdSeq == 3)
       {
-        Serial.println("RTT: " + String(t_2 - t_1) + " us");
+        uint64_t T3_recv = t_recv + rcvdTime;
+        Serial.println("Medição Completa!");
+                Serial.println("T0 (Móvel Envio): " + String(T0_send) + " us");
+                Serial.println("T1 (Âncora Envio): " + String(T1_recv) + " us");
+                Serial.println("T2 (Móvel Envio): " + String(T2_send) + " us");
+                Serial.println("T3 (Âncora Envio): " + String(T3_recv) + " us");
+                
+                Serial.println("RTT (us) - Cálculo Simplificado (Ainda impreciso sem os 6 tempos): ");
+                // Seu cálculo de RTT precisa de T1_recv e T3_recv da Âncora no pacote.
+                // A implementação de TWR-S (Two-Way Ranging Symmetric) exigiria mais dados no pacote.
+                
+                // Para o seu RTT atual (4 pacotes com ToA compensado):
+                Serial.println("RTT parcial: " + String(T1_recv - T0_send) + " us");
+                Serial.println("RTT parcial: " + String(T3_recv - T2_send) + " us");
+                Serial.println("RTT total : " + String((T3_recv - T2_send)-(T1_recv - T0_send)) + " us");
+                Serial.println("RTT total : " + String((T3_recv - T0_send)-(T2_send - T1_recv)) + " us");
+
         seq = 0;
         rcvdSeq = 0;
       }

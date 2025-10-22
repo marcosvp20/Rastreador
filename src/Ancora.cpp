@@ -65,32 +65,37 @@ void setup() {
 }
 void loop()
 {
-  if(lora.receiveData(receivedBuffer, PAYLOAD_SIZE, 5000))
-  {
+  // Use variáveis globais para TWR para maior clareza
+    static uint64_t T0_recv = 0; // T0 no relógio do móvel
+    static uint64_t T1_send = 0; // T1 no relógio do fixo
+    static uint64_t T2_recv = 0; // T2 no relógio do móvel
+    static uint64_t T3_send = 0; // T3 no relógio do fixo
+
     static uint32_t rcvdSeq = 0;
     static uint64_t rcvdTime = 0;
-    uint64_t nextTime = micros();
+
+  if(lora.receiveData(receivedBuffer, PAYLOAD_SIZE, 5000))
+  {
+    uint64_t t_recv = micros(); // tempo de recepção do pacote
     if(decodePacket(receivedBuffer, sizeof(receivedBuffer), rcvdSeq, rcvdTime))
     {
-      int t_pre = micros();
+
       if(rcvdSeq == 0)
       {
-        
-        t_1 = micros() - t_pre + lora.getTimeOnAir(PAYLOAD_SIZE);
-        packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), ++rcvdSeq, t_1);
+        T0_recv = t_recv + rcvdTime;
+        Serial.println("Enviando pacote 1");
+        T1_send = micros() + lora.getTimeOnAir(PAYLOAD_SIZE); 
+        packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), ++rcvdSeq, T1_send);
         lora.sendData(packetBuffer, packetSize);
       }
       if(rcvdSeq == 2)
       {
-        
-        t_2 = micros() - t_pre + lora.getTimeOnAir(PAYLOAD_SIZE);
-        packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), ++rcvdSeq, t_2);
+        T2_recv = t_recv + rcvdTime;
+        Serial.println("Enviando pacote 3");
+        T3_send = micros() + lora.getTimeOnAir(PAYLOAD_SIZE);
+        packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), ++rcvdSeq, T3_send);
         lora.sendData(packetBuffer, packetSize);
       }
-        if(rcvdSeq == 4)
-        {
-            Serial.println("RTT: " + String(t_2 - t_1) + " us");
-        }
     }
 }
 }
