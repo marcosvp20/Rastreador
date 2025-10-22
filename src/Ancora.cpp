@@ -67,21 +67,24 @@ void loop()
 {
   if(lora.receiveData(receivedBuffer, PAYLOAD_SIZE, 5000))
   {
-    uint32_t rcvdSeq;
-    uint64_t rcvdTime;
+    static uint32_t rcvdSeq = 0;
+    static uint64_t rcvdTime = 0;
     uint64_t nextTime = micros();
     if(decodePacket(receivedBuffer, sizeof(receivedBuffer), rcvdSeq, rcvdTime))
     {
-      if(rcvdSeq == 1)
+      int t_pre = micros();
+      if(rcvdSeq == 0)
       {
-        t_1 = micros();
-        packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), ++rcvdSeq, nextTime);
+        
+        t_1 = micros() - t_pre + lora.getTimeOnAir(PAYLOAD_SIZE);
+        packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), ++rcvdSeq, t_1);
         lora.sendData(packetBuffer, packetSize);
       }
-      if(rcvdSeq == 3)
+      if(rcvdSeq == 2)
       {
-        t_2 = micros();
-        packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), ++rcvdSeq, nextTime);
+        
+        t_2 = micros() - t_pre + lora.getTimeOnAir(PAYLOAD_SIZE);
+        packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), ++rcvdSeq, t_2);
         lora.sendData(packetBuffer, packetSize);
       }
         if(rcvdSeq == 4)

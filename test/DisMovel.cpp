@@ -62,29 +62,36 @@ void setup() {
   lora.begin();
   lora.SpreadingFactor(12);
   t_1 = micros();
-  Serial.println("Enviando pacote 0");
-  packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), seq, t_1);
-  lora.sendData(packetBuffer, packetSize);
 }
 void loop()
 {
+  static uint32_t rcvdSeq = 0;
+  static uint64_t rcvdTime = 0;
+  uint64_t nextTime = micros();
+  if((!rcvdSeq || seq == 0))
+  {
+  Serial.println("Enviando pacote 0");
+  packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), seq, t_1);
+  lora.sendData(packetBuffer, packetSize);
+  seq++;
+  }
   if(lora.receiveData(receivedBuffer, PAYLOAD_SIZE, 5000))
   {
-    uint32_t rcvdSeq;
-    uint64_t rcvdTime;
-    uint64_t nextTime = micros();
+    uint64_t t_pre = micros();
     if(decodePacket(receivedBuffer, sizeof(receivedBuffer), rcvdSeq, rcvdTime))
     {
-      if(rcvdSeq == 2)
+      if(rcvdSeq == 1)
       {
-        t_2 = micros();
         Serial.println("Enviando pacote 3");
+        t_2 = micros() - t_pre + lora.getTimeOnAir(PAYLOAD_SIZE);
         packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), ++rcvdSeq, t_2);
         lora.sendData(packetBuffer, packetSize);
       }
-      if(rcvdSeq == 4)
+      if(rcvdSeq == 3)
       {
         Serial.println("RTT: " + String(t_2 - t_1) + " us");
+        seq = 0;
+        rcvdSeq = 0;
       }
 
     }

@@ -76,6 +76,10 @@ void CMSLoRa::sendData(unsigned char* data, size_t size) {
     }
     
 }
+uint64_t CMSLoRa::getTimeOnAir(size_t size)
+{
+  return radio.getTimeOnAir(size);
+}
 bool CMSLoRa::receiveData(unsigned char* packetBuffer, size_t bufferSize, unsigned long timeOut){
     receiveDone = false;
     radio.startReceive(); // inicia o recebimento no modo não bloqueante

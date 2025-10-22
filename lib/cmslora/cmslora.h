@@ -68,6 +68,7 @@ class CMSLoRa {
   *   
  */
     void setBandwidth(float bandwidth = 31.25);
+    uint64_t getTimeOnAir(size_t size);
 
   private:
     static constexpr uint8_t LORA_SCK    = 9;
