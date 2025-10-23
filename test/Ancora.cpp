@@ -76,7 +76,7 @@ void loop()
 
   if(lora.receiveData(receivedBuffer, PAYLOAD_SIZE, 5000))
   {
-    uint64_t t_recv = micros(); // tempo de recepção do pacote
+    uint64_t t_recv = micros(); // tempo que o pacote foi recebido
     if(decodePacket(receivedBuffer, sizeof(receivedBuffer), rcvdSeq, rcvdTime))
     {
 
@@ -84,17 +84,21 @@ void loop()
       {
         T0_recv = t_recv + rcvdTime;
         Serial.println("Enviando pacote 1");
-        T1_send = micros() + lora.getTimeOnAir(PAYLOAD_SIZE); 
+        T1_send = (micros() - t_recv) + lora.timeOnAir(PAYLOAD_SIZE);  // aq n deveria ser micros - t_recv?
+        Serial.println("Tempo de processamento: " + String(micros() - t_recv));
+        Serial.println("Time on air: " + String(lora.timeOnAir(PAYLOAD_SIZE)));
         packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), ++rcvdSeq, T1_send);
         lora.sendData(packetBuffer, packetSize);
       }
       if(rcvdSeq == 2)
       {
-        T2_recv = t_recv + rcvdTime;
-        Serial.println("Enviando pacote 3");
-        T3_send = micros() + lora.getTimeOnAir(PAYLOAD_SIZE);
-        packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), ++rcvdSeq, T3_send);
-        lora.sendData(packetBuffer, packetSize);
+        Serial.println("Tempo do disp móvel: " + String(rcvdTime));
+        
+        // T2_recv = t_recv + rcvdTime;
+        // Serial.println("Enviando pacote 3");
+        // T3_send = micros() + lora.timeOnAir(PAYLOAD_SIZE);
+        // packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), ++rcvdSeq, T3_send);
+        // lora.sendData(packetBuffer, packetSize);
       }
     }
 }
