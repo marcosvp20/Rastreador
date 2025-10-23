@@ -93,7 +93,7 @@ void loop()
       if(rcvdSeq == 1)
       {
         uint64_t T_processTEMP = micros();
-        RTT = (micros() - T0_send)/2;
+        RTT =  ((micros() - T0_send)/2 - lora.timeOnAir(PAYLOAD_SIZE));
         Serial.println("RTT estimado: " + String(RTT) + " us");
         Serial.println("Distancia estimada = " + String(((RTT * 10e-6) * 299792458)) + " m");
         
@@ -105,6 +105,8 @@ void loop()
         Serial.println("Tempo do dispositivo móvel: " + String(T2_send) + " us");
         packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), ++rcvdSeq, T2_send);
         lora.sendData(packetBuffer, packetSize);
+        seq = 0;
+        rcvdSeq = 0;
       }
       // if(rcvdSeq == 3)
       // {
