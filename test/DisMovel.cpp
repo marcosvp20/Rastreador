@@ -1,4 +1,8 @@
 #include "cmslora.h"
+#include <WiFi.h>
+#include "time.h"
+#include "esp_sntp.h"
+#include "esp_timer.h"
 
 CMSLoRa lora;
 
@@ -6,6 +10,16 @@ CMSLoRa lora;
 #include <string.h> // para memcpy
 
 #define PAYLOAD_SIZE 20
+
+// #define WiFiSSID "Galaxy M31C458"
+// #define WiFiPassWord "ibse1870"
+#define WiFiSSID "M34 de Marcos"
+#define WiFiPassWord "marcos123"
+const char *ntpServer1 = "time.nist.gov";
+const char *ntpServer2 = "time.nist.gov";
+RTC_DATA_ATTR bool initTimer = false;
+bool initSNTP = false;
+RTC_DATA_ATTR time_t base_unix_time = 0;
 
 uint8_t packetBuffer[PAYLOAD_SIZE];
 uint8_t receivedBuffer[PAYLOAD_SIZE];
@@ -66,43 +80,124 @@ bool decodePacket(uint8_t* buffer, size_t bufferSize, uint32_t &seq, uint64_t &t
     return true;
 }
 
+void  getUnixTime(void *arg) {
+  /*time_t now = time(nullptr);
+    if (now < base_unix_time) {
+        return base_unix_time;
+    }
+    return now;*/
+    struct timeval now;
+    char strftime_buf[64];
+    struct tm timeinfo;
+    configTime(0, 0, ntpServer1, ntpServer2);
+
+    setenv("TZ", "<-03>3", 1); // Define o fuso horário para BRT (Brasília)
+    tzset();
+    time(&now.tv_sec);
+    // getLocalTime(&now);
+    // Set timezone to Brazil
+    localtime_r(&now.tv_sec, &timeinfo);
+    strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+    Serial.printf("\n  The current date/time in São Paulo is: %s\n  ", strftime_buf);
+    base_unix_time = now.tv_sec; // Atualiza o tempo base;
+    Serial.printf("Unix time: %ld\n", base_unix_time);
+}
+
+void notify(struct timeval* t) {
+  Serial.println("Synchronized");
+}
+
+void wait4SNTP() {
+    int validation;
+    unsigned long start = millis();
+    do {
+        validation = sntp_get_sync_status();
+        if (millis() - start > 20000) { // 20 seconds timeout
+            Serial.println("SNTP sync timeout!");
+            validation = 0;
+            break;
+        }
+    } while (validation != SNTP_SYNC_STATUS_COMPLETED);
+
+    if (validation == SNTP_SYNC_STATUS_COMPLETED) {
+        Serial.println("SNTP sync completed!");
+        // return true;
+    }else{
+        Serial.println("Could not sync with SNTP");
+        // return false;
+    }
+}
+
+void syncSNTPtime(void *arg) {
+    esp_netif_init();
+    if(sntp_enabled()){
+        esp_sntp_stop();
+    }
+    // configTime(0, 0, ntpServer1, ntpServer2); // Set NTP servers
+    esp_sntp_setservername(0, ntpServer1);
+    esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
+    sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH); // Use smooth sync mode for better accuracy
+    sntp_set_sync_interval(1);// Set sync interval to 1 hour
+    sntp_set_time_sync_notification_cb(notify); // Optional: callback on sync
+    esp_sntp_servermode_dhcp(1); // Enable DHCP for NTP server address
+    esp_sntp_init();
+    wait4SNTP();
+}
+
 
 void setup() {
   Serial.begin(115200);
   lora.begin();
   lora.SpreadingFactor(12);
+  WiFi.begin(WiFiSSID, WiFiPassWord);
+  esp_sleep_enable_timer_wakeup(10 * 1000000ULL); // 10 seconds
+
 }
 void loop()
 {
+  getUnixTime(nullptr);
+  if(!initSNTP && WiFi.status() != WL_CONNECTED){
+    syncSNTPtime(nullptr);
+    initSNTP = true;
+    if(!initTimer){
+      do{
 
-  
-  if((!rcvdSeq || seq == 0))
+        getUnixTime(nullptr);
+
+      }while ((base_unix_time % 10) != 0);
+      initTimer = true;
+      esp_deep_sleep_start();
+    }
+  }
+  else {if((!rcvdSeq || seq == 0))
   {
   seq = 0;
   Serial.println("Enviando pacote 0");
-  packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), seq, 0);
-  T0_send = micros();
+  // tempo de envio do pacote : lora.getTimeOnAir(PAYLOAD_SIZE) = 1581056 us
+  T0_send = micros() + 1581056; // momento de envio do pacote
+  
+  Serial.println("Tempo de processamento: " + String(T0_send) + " us");
+  packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), seq, T0_send);
   lora.sendData(packetBuffer, packetSize);
-  seq=1;
+  seq = 1;
   }
-  if(lora.receiveData(receivedBuffer, PAYLOAD_SIZE, 5000))
+  else if(lora.receiveData(receivedBuffer, PAYLOAD_SIZE, 5000))
   {
-    uint64_t t_recv = micros(); // tempo de recepção do pacote
+    uint64_t t_recv = micros(); // momento de recepção do pacote
     if(decodePacket(receivedBuffer, sizeof(receivedBuffer), rcvdSeq, rcvdTime))
     {
+      uint64_t t_decode = micros() - t_recv; //tempo de processamento (atual - recebimento)
       if(rcvdSeq == 1)
       {
-        uint64_t T_processTEMP = micros();
-        RTT =  ((micros() - T0_send)/2 - lora.timeOnAir(PAYLOAD_SIZE));
-        Serial.println("RTT estimado: " + String(RTT) + " us");
-        Serial.println("Distancia estimada = " + String(((RTT * 10e-6) * 299792458)) + " m");
+        
+        T1_recv = t_recv - rcvdTime; // tempo de recebimento - tempo no ar = tempo de envio
+        RTT = (lora.getTimeOnAir(PAYLOAD_SIZE));
+        Serial.println("RTT estimado: " + String(T1_recv) + " us");
+        Serial.println("Distancia estimada = " + String(((T1_recv * 1e-6) * 299792458)) + " m"); 
+        Serial.println("Tempo de processamento: " + String(t_decode) + " us");
         
         Serial.println("Enviando pacote 3");
-
-        T_process = micros() - T_processTEMP;
-        Serial.println("Tempo de processamento: " + String(T_process) + " us");
-        T2_send = T_process + micros() + lora.timeOnAir(PAYLOAD_SIZE);
-        Serial.println("Tempo do dispositivo móvel: " + String(T2_send) + " us");
+        T2_send = (micros() + 1581056); // momento atual + tempo no ar =
         packetSize = buildPacket(packetBuffer, sizeof(packetBuffer), ++rcvdSeq, T2_send);
         lora.sendData(packetBuffer, packetSize);
         seq = 0;
@@ -132,5 +227,6 @@ void loop()
       // }
 
     }
+  }
 }
 }
